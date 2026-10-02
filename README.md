@@ -12,10 +12,13 @@ English is the default interface language. Switch to 한국어 from the header. 
 
 - Format JSON, YAML, XML, HTML, CSS, JavaScript, SQL, and Markdown.
 - Explore JSON with a collapsible tree view.
+- Pin multiple formatted results in a side-by-side comparison area; rename, copy, remove, and scroll them together.
 - Choose 2 or 4 spaces of indentation, wrap long lines, and see syntax-highlighted output.
 - Open files by picker or drag and drop; copy or download the result.
 - Use **Ctrl/⌘ + Enter** to format quickly.
 - Process content locally in the browser. There is no server endpoint for your input.
+
+![Two formatted results in the comparison area](docs/comparison.png)
 
 ## Run locally
 

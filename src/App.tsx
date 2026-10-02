@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownToLine, ArrowRight, Braces, Check, CheckCheck, ChevronDown, ChevronRight,
   CircleAlert, CircleCheck, Clipboard, Code2, FileCode2, FileInput, FileText,
-  Github, Globe2, Grip, LockKeyhole, RotateCcw, Sparkles, Upload, WrapText, X,
+  Github, Globe2, Grip, Link2, LockKeyhole, Pin, RotateCcw, Sparkles, Trash2, Upload, WrapText, X,
 } from 'lucide-react';
 import hljs from 'highlight.js/lib/core';
 import jsonLanguage from 'highlight.js/lib/languages/json';
@@ -31,6 +31,14 @@ const highlightLanguage: Record<FormatId, string> = {
 const formatIcons: Record<FormatId, typeof Braces> = {
   json: Braces, yaml: Grip, xml: Code2, html: FileCode2,
   css: Sparkles, javascript: Code2, sql: FileText, markdown: FileText,
+};
+
+type ComparisonSnapshot = {
+  id: number;
+  name: string;
+  defaultName: string;
+  format: FormatId;
+  value: string;
 };
 
 function countLines(value: string): number {
@@ -133,8 +141,16 @@ function App() {
   const [isFormatting, setIsFormatting] = useState(false);
   const [copied, setCopied] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [snapshots, setSnapshots] = useState<ComparisonSnapshot[]>([]);
+  const [syncScroll, setSyncScroll] = useState(true);
+  const [copiedSnapshot, setCopiedSnapshot] = useState<number | null>(null);
+  const [compareError, setCompareError] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const compareRef = useRef<HTMLElement>(null);
+  const comparisonScrollRefs = useRef(new Map<number, HTMLDivElement>());
+  const isSyncingScroll = useRef(false);
+  const nextSnapshotId = useRef(1);
   const runId = useRef(0);
   const t = translations[locale];
 
@@ -256,6 +272,49 @@ function App() {
     });
   }
 
+  function addToCompare() {
+    if (!output) return;
+    const id = nextSnapshotId.current++;
+    const formatName = formats.find((item) => item.id === format)?.name ?? format.toUpperCase();
+    setSnapshots((current) => {
+      let number = 1;
+      while (current.some((item) => item.name === `${formatName} ${number}`)) number++;
+      const defaultName = `${formatName} ${number}`;
+      return [...current, { id, name: defaultName, defaultName, format, value: output }];
+    });
+    setCompareError('');
+  }
+
+  function updateSnapshotName(id: number, name: string) {
+    setSnapshots((current) => current.map((item) => item.id === id ? { ...item, name } : item));
+  }
+
+  function removeSnapshot(id: number) {
+    setSnapshots((current) => current.filter((item) => item.id !== id));
+    setCompareError('');
+  }
+
+  function onComparisonScroll(id: number, event: React.UIEvent<HTMLDivElement>) {
+    if (!syncScroll || isSyncingScroll.current) return;
+    isSyncingScroll.current = true;
+    const top = event.currentTarget.scrollTop;
+    for (const [otherId, element] of comparisonScrollRefs.current) {
+      if (otherId !== id && element.scrollTop !== top) element.scrollTop = top;
+    }
+    requestAnimationFrame(() => { isSyncingScroll.current = false; });
+  }
+
+  async function copySnapshot(item: ComparisonSnapshot) {
+    try {
+      await navigator.clipboard.writeText(item.value);
+      setCopiedSnapshot(item.id);
+      setCompareError('');
+      window.setTimeout(() => setCopiedSnapshot((current) => current === item.id ? null : current), 1800);
+    } catch {
+      setCompareError(t.clipboardError);
+    }
+  }
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -318,7 +377,7 @@ function App() {
             </section>
 
             <section className="editor-card output-card" aria-labelledby="output-heading">
-              <div className="editor-header"><div className="editor-heading"><span className="editor-icon output-icon"><CheckCheck size={18} /></span><div><h3 id="output-heading">{t.output}</h3><p>{t.outputSub}</p></div></div><div className="header-actions"><button className="icon-text-button" onClick={() => void copyOutput()} disabled={!output} title={t.copy}>{copied ? <Check size={16} /> : <Clipboard size={16} />}<span>{copied ? t.copied : t.copy}</span></button><button className="icon-button" onClick={downloadOutput} disabled={!output} title={t.download} aria-label={t.download}><ArrowDownToLine size={17} /></button></div></div>
+              <div className="editor-header"><div className="editor-heading"><span className="editor-icon output-icon"><CheckCheck size={18} /></span><div><h3 id="output-heading">{t.output}</h3><p>{t.outputSub}</p></div></div><div className="header-actions"><button className="icon-text-button compare-add-button" onClick={addToCompare} disabled={!output} title={t.addToCompare} aria-label={t.addToCompare}><Pin size={16} /><span>{t.addToCompare}</span></button><button className="icon-text-button" onClick={() => void copyOutput()} disabled={!output} title={t.copy}>{copied ? <Check size={16} /> : <Clipboard size={16} />}<span>{copied ? t.copied : t.copy}</span></button><button className="icon-button" onClick={downloadOutput} disabled={!output} title={t.download} aria-label={t.download}><ArrowDownToLine size={17} /></button></div></div>
               <div className="output-tabs"><div className="tab-group"><button className={view === 'code' ? 'active' : ''} onClick={() => setView('code')}><Code2 size={14} />{t.code}</button>{format === 'json' && parsedJson !== null && <button className={view === 'tree' ? 'active' : ''} onClick={() => setView('tree')}><Braces size={14} />{t.tree}</button>}</div><button className={`wrap-button ${wrap ? 'active' : ''}`} onClick={() => setWrap(!wrap)} aria-pressed={wrap} title={t.wrap}><WrapText size={16} /><span>{t.wrap}</span></button></div>
               <div className="editor-body output-body">
                 {output ? view === 'tree' && format === 'json' && parsedJson !== null ? <div className="tree-view"><div className="tree-toolbar"><span>{t.treeTitle}</span><div><button onClick={() => setCollapsed(new Set())}>{t.expandAll}</button><button onClick={() => setCollapsed(new Set(allBranchPaths(parsedJson)))}>{t.collapseAll}</button></div></div><JsonNode value={parsedJson} path="$" depth={0} collapsed={collapsed} toggle={togglePath} locale={locale} /></div> : <CodeOutput value={output} format={format} wrap={wrap} /> : <div className="empty-output"><div className="empty-icon"><Braces size={25} /></div><span>{t.noOutput}</span></div>}
@@ -331,8 +390,37 @@ function App() {
           </div>
           {status === 'error' && errorDetail && <div className="error-banner" role="alert"><CircleAlert size={17} /><span>{errorDetail}</span></div>}
 
-          <div className="action-row"><div className="settings"><label htmlFor="indent-select">{t.indent}</label><select id="indent-select" value={indent} onChange={(event) => setIndent(Number(event.target.value) as IndentSize)}><option value="2">2 {t.spaces}</option><option value="4">4 {t.spaces}</option></select><span className="settings-divider" /><span className="keyboard-hint"><kbd>Ctrl</kbd> / <kbd>⌘</kbd> + <kbd>Enter</kbd></span></div><button className="primary-button" onClick={() => void beautify()} disabled={isFormatting}><Sparkles size={17} />{isFormatting ? t.formatting : t.format}<ArrowRight size={17} /></button></div>
+          <div className="action-row"><div className="settings"><label htmlFor="indent-select">{t.indent}</label><select id="indent-select" value={indent} onChange={(event) => setIndent(Number(event.target.value) as IndentSize)}><option value="2">2 {t.spaces}</option><option value="4">4 {t.spaces}</option></select><span className="settings-divider" /><span className="keyboard-hint"><kbd>Ctrl</kbd> / <kbd>⌘</kbd> + <kbd>Enter</kbd></span></div><div className="action-buttons">{snapshots.length > 0 && <button className="comparison-jump" onClick={() => compareRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}><Pin size={15} />{t.compare} <span>{snapshots.length}</span></button>}<button className="primary-button" onClick={() => void beautify()} disabled={isFormatting}><Sparkles size={17} />{isFormatting ? t.formatting : t.format}<ArrowRight size={17} /></button></div></div>
           <p className="file-hint">{t.fileHint}</p>
+        </section>
+
+        <section className="compare-section" aria-labelledby="compare-heading" ref={compareRef}>
+          <div className="section-topline compare-topline">
+            <div><span className="section-kicker">{t.compareKicker}</span><h2 id="compare-heading">{t.compare}</h2></div>
+            <span className="supported-count">{snapshots.length} {t.savedResults} <span className="count-dot" /></span>
+          </div>
+          <div className="compare-intro">
+            <p>{t.compareDescription}</p>
+            {snapshots.length > 1 && <button className={`sync-button ${syncScroll ? 'active' : ''}`} onClick={() => setSyncScroll((current) => !current)} aria-pressed={syncScroll}><Link2 size={15} />{t.syncScroll}</button>}
+          </div>
+          {snapshots.length === 0 ? (
+            <div className="compare-empty"><span className="compare-empty-icon"><Pin size={24} /></span><strong>{t.compareEmptyTitle}</strong><p>{t.compareEmptyDescription}</p></div>
+          ) : (
+            <div className={`compare-grid columns-${Math.min(snapshots.length, 3)}`}>
+              {snapshots.map((item, index) => (
+                <article className="snapshot-card" key={item.id} aria-label={`${t.savedResult} ${item.name}`}>
+                  <div className="snapshot-header">
+                    <span className="snapshot-number">{String(index + 1).padStart(2, '0')}</span>
+                    <input value={item.name} onChange={(event) => updateSnapshotName(item.id, event.target.value)} onBlur={(event) => updateSnapshotName(item.id, event.target.value.trim() || item.defaultName)} aria-label={t.renameResult} maxLength={50} />
+                    <div className="snapshot-actions"><button onClick={() => void copySnapshot(item)} aria-label={`${t.copy} ${item.name}`} title={t.copy}>{copiedSnapshot === item.id ? <Check size={16} /> : <Clipboard size={16} />}</button><button onClick={() => removeSnapshot(item.id)} aria-label={`${t.removeResult} ${item.name}`} title={t.removeResult}><Trash2 size={16} /></button></div>
+                  </div>
+                  <div className="snapshot-meta"><span className="snapshot-format">{formats.find((entry) => entry.id === item.format)?.name}</span><span>{countLines(item.value)} {t.lines} <span className="meta-dot">·</span> {formatBytes(item.value)}</span></div>
+                  <div className="snapshot-code-scroll" ref={(element) => { if (element) comparisonScrollRefs.current.set(item.id, element); else comparisonScrollRefs.current.delete(item.id); }} onScroll={(event) => onComparisonScroll(item.id, event)}><CodeOutput value={item.value} format={item.format} wrap={wrap} /></div>
+                </article>
+              ))}
+            </div>
+          )}
+          {compareError && <div className="error-banner" role="alert"><CircleAlert size={17} /><span>{compareError}</span></div>}
         </section>
       </main>
 
