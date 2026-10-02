@@ -2,6 +2,8 @@
 
 **복잡한 데이터를 한눈에.** Beautify는 자주 쓰는 파일을 읽기 쉽게 정리하는 무료 오픈소스 도구입니다. 텍스트를 붙여 넣거나 로컬 파일을 연 뒤, 결과를 살펴보고 복사하거나 다운로드할 수 있습니다.
 
+**바로 사용하기:** [jwjp.github.io/beautify](https://jwjp.github.io/beautify/)
+
 기본 언어는 영어입니다. 화면 오른쪽 위에서 한국어로 바꿀 수 있습니다. [English README](README.md)
 
 ## 기능

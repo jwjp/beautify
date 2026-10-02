@@ -2,6 +2,8 @@
 
 **Make data make sense.** Beautify is a free, open-source formatter for the files developers work with every day. Paste text or open a local file, format it, inspect the result, then copy or download it.
 
+**Try it online:** [jwjp.github.io/beautify](https://jwjp.github.io/beautify/)
+
 English is the default interface language. Switch to 한국어 from the header. [한국어 안내](README.ko.md)
 
 ![Beautify desktop interface](docs/screenshot.png)
